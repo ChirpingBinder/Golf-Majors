@@ -129,7 +129,8 @@
         <h2 class="text-xl font-bold text-white mb-6 text-center sm:text-left">🏆 Pool Team Standings</h2>
         
         <!-- Centered flex container for team cards -->
-        <div id="team-standings" class="flex flex-wrap justify-center gap-6">
+        <!-- New 3-Column Centered Grid Wrapper -->
+<div id="team-standings" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 justify-center max-w-5xl mx-auto">
           <p class="text-gray-500 text-sm">No draft teams saved yet. Complete your picks on the Draft Page tab!</p>
         </div>
       </div>
@@ -683,121 +684,120 @@ function updateAddYearButtonState() {
     }
 
     function renderTeamStandings(teams, scores) {
-      const container = document.getElementById('team-standings');
-      const scoreMap = {};
-      const posMap = {};
-      const thruMap = {};
-      
-      scores.forEach(s => { 
-        scoreMap[s.player_name] = s.score;
-        posMap[s.player_name] = s.position;
-        thruMap[s.player_name] = s.thru;
-      });
+  const container = document.getElementById('team-standings');
+  const scoreMap = {};
+  const posMap = {};
+  const thruMap = {};
+  
+  scores.forEach(s => { 
+    scoreMap[s.player_name] = s.score;
+    posMap[s.player_name] = s.position;
+    thruMap[s.player_name] = s.thru;
+  });
 
-      const evaluatedTeams = teams.map(t => {
-        const golfersRaw = [t.golfer_1, t.golfer_2, t.golfer_3, t.golfer_4].filter(g => g !== 'Unassigned');
-        
-        let missedCutCount = 0;
-        let totalHolesRemaining = 0;
+  const evaluatedTeams = teams.map(t => {
+    const golfersRaw = [t.golfer_1, t.golfer_2, t.golfer_3, t.golfer_4].filter(g => g && g !== 'Unassigned');
+    
+    let missedCutCount = 0;
+    let totalHolesRemaining = 0;
 
-        const golferObjList = golfersRaw.map(name => {
-          const strScore = scoreMap[name] || 'E';
-          const pos = posMap[name] || '-';
-          const thru = thruMap[name] || 'F';
-          const numScore = parseScoreToNumeric(strScore);
-          const missedCut = isMissedCut(pos);
-          const holesLeft = calculateHolesLeft(thru);
+    const golferObjList = golfersRaw.map(name => {
+      const strScore = scoreMap[name] || 'E';
+      const pos = posMap[name] || '-';
+      const thru = thruMap[name] || 'F';
+      const numScore = parseScoreToNumeric(strScore);
+      const missedCut = isMissedCut(pos);
+      const holesLeft = calculateHolesLeft(thru);
 
-          if (missedCut) missedCutCount++;
-          if (!missedCut) totalHolesRemaining += holesLeft;
+      if (missedCut) missedCutCount++;
+      if (!missedCut) totalHolesRemaining += holesLeft;
 
-          return { name, strScore, numScore, missedCut, pos, thru, holesLeft };
-        });
+      return { name, strScore, numScore, missedCut, pos, thru, holesLeft };
+    });
 
-        const activeGolfers = golferObjList.length - missedCutCount;
-        const isDisqualified = enforceCutElimination && (activeGolfers < scoringCount);
+    const activeGolfers = golferObjList.length - missedCutCount;
+    const isDisqualified = enforceCutElimination && (activeGolfers < scoringCount);
 
-        golferObjList.sort((a, b) => {
-          if (a.missedCut && !b.missedCut) return 1;
-          if (!a.missedCut && b.missedCut) return -1;
-          return a.numScore - b.numScore;
-        });
+    golferObjList.sort((a, b) => {
+      if (a.missedCut && !b.missedCut) return 1;
+      if (!a.missedCut && b.missedCut) return -1;
+      return a.numScore - b.numScore;
+    });
 
-        let total = 0;
-        golferObjList.forEach((g, idx) => {
-          if (idx < scoringCount && !g.missedCut) {
-            g.counted = true;
-            total += g.numScore;
-          } else {
-            g.counted = false;
-          }
-        });
+    let total = 0;
+    golferObjList.forEach((g, idx) => {
+      if (idx < scoringCount && !g.missedCut) {
+        g.counted = true;
+        total += g.numScore;
+      } else {
+        g.counted = false;
+      }
+    });
 
-        return { 
-          name: t.user_name, 
-          golfers: golferObjList, 
-          totalScore: total, 
-          missedCutCount, 
-          isDisqualified,
-          totalHolesRemaining
-        };
-      }).sort((a, b) => {
-        if (a.isDisqualified && !b.isDisqualified) return 1;
-        if (!a.isDisqualified && b.isDisqualified) return -1;
-        return a.totalScore - b.totalScore;
-      });
+    return { 
+      name: t.user_name || 'Unnamed Team', 
+      golfers: golferObjList, 
+      totalScore: total, 
+      missedCutCount, 
+      isDisqualified,
+      totalHolesRemaining
+    };
+  }).sort((a, b) => {
+    if (a.isDisqualified && !b.isDisqualified) return 1;
+    if (!a.isDisqualified && b.isDisqualified) return -1;
+    return a.totalScore - b.totalScore;
+  });
 
-      container.innerHTML = evaluatedTeams.map((t, idx) => `
-        <div class="w-full sm:w-[320px] bg-gray-900 p-5 rounded-xl border ${t.isDisqualified ? 'border-red-600/80 bg-red-950/20' : 'border-gray-700'} flex flex-col justify-between shadow-lg transition hover:border-gray-600">
-          <div>
-            <div class="flex justify-between items-center border-b border-gray-800 pb-3 mb-3">
-              <div class="flex flex-col">
-                <div class="flex items-center gap-2">
-                  <span class="font-bold text-base text-white">#${idx + 1} ${t.name}</span>
-                  ${t.isDisqualified ? '<span class="text-[10px] bg-red-900 text-red-200 border border-red-600 font-bold px-2 py-0.5 rounded font-mono">DQ - LOSS</span>' : ''}
-                </div>
-                ${!t.isDisqualified ? `
-                  <span class="text-[10px] font-mono text-blue-400 mt-0.5 flex items-center gap-1">
-                    ⚡ ${t.totalHolesRemaining} Holes Left Today
-                  </span>
-                ` : ''}
+  container.innerHTML = evaluatedTeams.map((t, idx) => `
+    <div class="w-full bg-gray-900 p-4 md:p-5 rounded-xl border ${t.isDisqualified ? 'border-red-600/80 bg-red-950/20' : 'border-gray-700'} flex flex-col justify-between shadow-lg transition hover:border-gray-600">
+      <div>
+        <div class="flex justify-between items-center border-b border-gray-800 pb-3 mb-3">
+          <div class="flex flex-col">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-base text-white">#${idx + 1} ${t.name}</span>
+              ${t.isDisqualified ? '<span class="text-[10px] bg-red-900 text-red-200 border border-red-600 font-bold px-2 py-0.5 rounded font-mono">DQ - LOSS</span>' : ''}
+            </div>
+            ${!t.isDisqualified ? `
+              <span class="text-[10px] font-mono text-blue-400 mt-0.5 flex items-center gap-1">
+                ⚡ ${t.totalHolesRemaining} Holes Left Today
+              </span>
+            ` : ''}
+          </div>
+
+          ${t.isDisqualified ? `
+            <span class="font-mono font-bold text-xs px-2.5 py-1 rounded-md bg-red-950 text-red-400 border border-red-800">
+              OUT (${t.missedCutCount}+ MC)
+            </span>
+          ` : `
+            <span class="font-mono font-bold text-sm px-2.5 py-1 rounded-md ${t.totalScore < 0 ? 'bg-green-950 text-green-400 border border-green-800' : t.totalScore > 0 ? 'bg-red-950 text-red-400 border border-red-800' : 'bg-gray-800 text-gray-300 border border-gray-700'}">
+              ${t.totalScore > 0 ? '+' + t.totalScore : t.totalScore === 0 ? 'E' : t.totalScore}
+            </span>
+          `}
+        </div>
+
+        <ul class="space-y-2.5 text-xs">
+          ${t.golfers.length > 0 ? t.golfers.map(g => `
+            <li class="flex justify-between items-center ${g.counted && !t.isDisqualified ? 'text-gray-200 font-medium' : 'text-gray-500 line-through'}">
+              <div class="flex flex-col truncate max-w-[170px]">
+                <span class="flex items-center gap-1.5 truncate">
+                  ${g.name}${g.missedCut ? '<span class="text-[9px] bg-red-950 text-red-400 border border-red-800/80 px-1 rounded no-underline font-normal">CUT</span>' : ''}
+                </span>
+                <span class="text-[10px] font-mono text-gray-400 no-underline">
+                  ${g.missedCut ? 'MC' : 'Thru: ' + (g.thru || 'F')}
+                </span>
               </div>
 
-              ${t.isDisqualified ? `
-                <span class="font-mono font-bold text-xs px-2.5 py-1 rounded-md bg-red-950 text-red-400 border border-red-800">
-                  OUT (2+ MC)
-                </span>
-              ` : `
-                <span class="font-mono font-bold text-sm px-2.5 py-1 rounded-md ${t.totalScore < 0 ? 'bg-green-950 text-green-400 border border-green-800' : t.totalScore > 0 ? 'bg-red-950 text-red-400 border border-red-800' : 'bg-gray-800 text-gray-300 border border-gray-700'}">
-                  ${t.totalScore > 0 ? '+' + t.totalScore : t.totalScore === 0 ? 'E' : t.totalScore}
-                </span>
-              `}
-            </div>
-
-            <ul class="space-y-2.5 text-xs">
-              ${t.golfers.length > 0 ? t.golfers.map(g => `
-                <li class="flex justify-between items-center ${g.counted && !t.isDisqualified ? 'text-gray-200 font-medium' : 'text-gray-500 line-through'}">
-                  <div class="flex flex-col truncate max-w-[170px]">
-                    <span class="flex items-center gap-1.5 truncate">
-                      ${g.name}${g.missedCut ? '<span class="text-[9px] bg-red-950 text-red-400 border border-red-800/80 px-1 rounded no-underline font-normal">CUT</span>' : ''}
-                    </span>
-                    <span class="text-[10px] font-mono text-gray-400 no-underline">
-                      ${g.missedCut ? 'MC' : 'Thru: ' + (g.thru || 'F')}
-                    </span>
-                  </div>
-
-                  <div class="flex items-center gap-2">
-                    ${!g.counted && !g.missedCut ? '<span class="text-[9px] bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded uppercase font-mono no-underline">Dropped</span>' : ''}
-                    <span class="font-mono font-semibold ${g.counted && !t.isDisqualified ? 'text-gray-300' : 'text-gray-500'}">${g.strScore}</span>
-                  </div>
-                </li>
-              `).join('') : '<li class="text-gray-500 text-center py-2">No golfers selected</li>'}
-            </ul>
-          </div>
-        </div>
-      `).join('');
-    }
-
+              <div class="flex items-center gap-2">
+                ${!g.counted && !g.missedCut ? '<span class="text-[9px] bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded uppercase font-mono no-underline">Dropped</span>' : ''}
+                <span class="font-mono font-semibold ${g.counted && !t.isDisqualified ? 'text-gray-300' : 'text-gray-500'}">${g.strScore}</span>
+              </div>
+            </li>
+          `).join('') : '<li class="text-gray-500 text-center py-2">No golfers selected</li>'}
+        </ul>
+      </div>
+    </div>
+  `).join('');
+}
     function renderTeamStandingsFromMatrix(scores) {
       const teams = [];
       for (let team = 1; team <= 5; team++) {
