@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <title>PGA Major Pool & Snake Draft</title>
-<!-- Native Mobile App & PWA Settings -->
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Golf Chat">
-<meta name="theme-color" content="#111827">
-<link rel="apple-touch-icon" href="https://img.icons8.com/color/512/golf.png">
+  <!-- Native Mobile App & PWA Settings -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Golf Chat">
+  <meta name="theme-color" content="#111827">
+  <link rel="apple-touch-icon" href="https://img.icons8.com/color/512/golf.png">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -290,24 +290,35 @@
       }
     }
 
-    function setScoringCount(count) {
+    // --- GLOBALLY SYNCED RULE UPDATES ---
+    async function setScoringCount(count) {
       scoringCount = count;
-      [2, 3, 4].forEach(c => {
-        const btn = document.getElementById(`score-count-${c}-btn`);
-        if (btn) {
-          if (c === count) {
-            btn.className = "px-3 py-1.5 rounded text-xs font-bold transition bg-green-600 text-white";
-          } else {
-            btn.className = "px-3 py-1.5 rounded text-xs font-bold transition text-gray-400 hover:text-white";
-          }
-        }
-      });
+      updateRuleUI();
+      try {
+        await db.from('pool_rules').upsert({ id: 1, scoring_count: count, cut_rule: enforceCutElimination });
+      } catch(e) { console.error("Error updating rules:", e); }
       loadData();
     }
 
-    function toggleCutRule() {
+    async function toggleCutRule() {
       enforceCutElimination = document.getElementById('rule-cut-elimination').checked;
+      try {
+        await db.from('pool_rules').upsert({ id: 1, scoring_count: scoringCount, cut_rule: enforceCutElimination });
+      } catch(e) { console.error("Error updating rules:", e); }
       loadData();
+    }
+
+    function updateRuleUI() {
+      [2, 3, 4].forEach(c => {
+        const btn = document.getElementById(`score-count-${c}-btn`);
+        if (btn) {
+          btn.className = (c === scoringCount) 
+            ? "px-3 py-1.5 rounded text-xs font-bold transition bg-green-600 text-white" 
+            : "px-3 py-1.5 rounded text-xs font-bold transition text-gray-400 hover:text-white";
+        }
+      });
+      const cutCheckbox = document.getElementById('rule-cut-elimination');
+      if (cutCheckbox) cutCheckbox.checked = enforceCutElimination;
     }
 
     function parseScoreToNumeric(scoreStr) {
@@ -332,14 +343,23 @@
       if (!isNaN(parsedHole)) {
         return Math.max(0, 18 - parsedHole);
       }
-      // If it's a tee time like "1:15 PM"
       return 18;
     }
 
     async function loadData() {
       const statusEl = document.getElementById('status');
 
-      // Load Winners from Local Storage if present
+      // Fetch Global Rules from Supabase
+      try {
+        const { data: rulesData } = await db.from('pool_rules').select('*').eq('id', 1).single();
+        if (rulesData) {
+          scoringCount = rulesData.scoring_count ?? 4;
+          enforceCutElimination = rulesData.cut_rule ?? true;
+          updateRuleUI();
+        }
+      } catch(e) {}
+
+      // Load Winners from Local Storage
       const savedWinners = localStorage.getItem('major_winners_grid');
       if (savedWinners) {
         try { winnersData = JSON.parse(savedWinners); } catch(e) {}
@@ -600,7 +620,6 @@
         let missedCutCount = 0;
         let totalHolesRemaining = 0;
 
-        // Parse individual scores
         const golferObjList = golfersRaw.map(name => {
           const strScore = scoreMap[name] || 'E';
           const pos = posMap[name] || '-';
@@ -615,18 +634,15 @@
           return { name, strScore, numScore, missedCut, pos, thru, holesLeft };
         });
 
-        // Check DQ condition
         const activeGolfers = golferObjList.length - missedCutCount;
         const isDisqualified = enforceCutElimination && (activeGolfers < scoringCount);
 
-        // Sort golfers: Active golfers with best score first, missed cut players at the end
         golferObjList.sort((a, b) => {
           if (a.missedCut && !b.missedCut) return 1;
           if (!a.missedCut && b.missedCut) return -1;
           return a.numScore - b.numScore;
         });
 
-        // Calculate total score based on scoring count setting
         let total = 0;
         golferObjList.forEach((g, idx) => {
           if (idx < scoringCount && !g.missedCut) {
@@ -654,7 +670,6 @@
       container.innerHTML = evaluatedTeams.map((t, idx) => `
         <div class="w-full sm:w-[320px] bg-gray-900 p-5 rounded-xl border ${t.isDisqualified ? 'border-red-600/80 bg-red-950/20' : 'border-gray-700'} flex flex-col justify-between shadow-lg transition hover:border-gray-600">
           <div>
-            <!-- Manager Header & Total Score -->
             <div class="flex justify-between items-center border-b border-gray-800 pb-3 mb-3">
               <div class="flex flex-col">
                 <div class="flex items-center gap-2">
@@ -679,7 +694,6 @@
               `}
             </div>
 
-            <!-- Golfers List -->
             <ul class="space-y-2.5 text-xs">
               ${t.golfers.length > 0 ? t.golfers.map(g => `
                 <li class="flex justify-between items-center ${g.counted && !t.isDisqualified ? 'text-gray-200 font-medium' : 'text-gray-500 line-through'}">
