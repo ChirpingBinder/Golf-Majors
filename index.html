@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PGA Major Pool & Snake Draft</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white p-4 md:p-8 font-sans">
+  <div class="max-w-6xl mx-auto space-y-6">
+    
+    <!-- Header & Navigation -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
+      <div>
+        <h1 id="tournament-name" class="text-2xl font-bold text-green-400">⛳ PGA Major Golf Pool</h1>
+        <p class="text-gray-400 text-xs mt-1">Live Snake Draft, Pool Standings & League History</p>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="flex items-center gap-2 bg-gray-900 p-1.5 rounded-lg border border-gray-700">
+        <button id="tab-draft-btn" onclick="switchTab('draft')" class="px-4 py-2 rounded-md font-semibold text-sm transition bg-green-600 text-white">
+          🐍 Draft Page
+        </button>
+        <button id="tab-leaderboard-btn" onclick="switchTab('leaderboard')" class="px-4 py-2 rounded-md font-semibold text-sm transition text-gray-400 hover:text-white">
+          🏆 Standings
+        </button>
+        <button id="tab-winners-btn" onclick="switchTab('winners')" class="px-4 py-2 rounded-md font-semibold text-sm transition text-gray-400 hover:text-white">
+          📜 Previous Winners
+        </button>
+      </div>
+    </div>
+
+    <!-- Status Message -->
+    <div id="status" class="text-yellow-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700">Connecting to Supabase...</div>
+
+    <!-- TAB 1: DRAFT PAGE -->
+    <div id="page-draft" class="space-y-6">
+      
+      <!-- Scoring Rules Selector Bar -->
+      <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 shadow-lg">
+        <div>
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            ⚙️ Pool Scoring & Format Rules
+          </h3>
+          <p class="text-xs text-gray-400">Set active scoring rules and cut penalty conditions before/during the draft</p>
+        </div>
+        
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full lg:w-auto">
+          <!-- Cut Loss Penalty Rule Checkbox -->
+          <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer bg-gray-900/80 px-3 py-2 rounded-lg border border-gray-700 hover:border-gray-600 transition">
+            <input type="checkbox" id="rule-cut-elimination" onchange="toggleCutRule()" class="rounded bg-gray-800 border-gray-700 text-red-600 focus:ring-0 w-4 h-4" checked>
+            <span>Strict Cut Loss (Too many MCs = Automatic Loss)</span>
+          </label>
+
+          <!-- Format Buttons -->
+          <div class="flex items-center gap-2 bg-gray-900 p-1 rounded-lg border border-gray-700">
+            <button id="score-count-4-btn" onclick="setScoringCount(4)" class="px-3 py-1.5 rounded text-xs font-bold transition bg-green-600 text-white">
+              Best 4 of 4
+            </button>
+            <button id="score-count-3-btn" onclick="setScoringCount(3)" class="px-3 py-1.5 rounded text-xs font-bold transition text-gray-400 hover:text-white">
+              Best 3 of 4
+            </button>
+            <button id="score-count-2-btn" onclick="setScoringCount(2)" class="px-3 py-1.5 rounded text-xs font-bold transition text-gray-400 hover:text-white">
+              Best 2 of 4
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Draft Board Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gray-800 p-4 rounded-xl border border-gray-700">
+        <div>
+          <h2 class="text-lg font-bold text-white">Interactive Draft Board (5 Teams x 4 Rounds)</h2>
+          <p class="text-xs text-gray-400">Picks auto-save instantly. Edit manager names freely at the top.</p>
+        </div>
+        
+        <div class="flex gap-2">
+          <button onclick="resetDraftBoard()" class="bg-red-900/80 hover:bg-red-800 text-red-200 font-bold py-2 px-4 rounded-lg text-xs border border-red-700 transition">
+            🔄 Reset Board For New Tournament
+          </button>
+        </div>
+      </div>
+
+      <!-- 5-Column Draft Board Grid -->
+      <div class="overflow-x-auto bg-gray-800 rounded-xl border border-gray-700 p-4 shadow-xl">
+        <div class="min-w-[800px]">
+          <!-- Column Headers: 5 Teams -->
+          <div class="grid grid-cols-5 gap-3 mb-4 border-b border-gray-700 pb-4">
+            <div class="bg-gray-900 p-3 rounded-lg border border-gray-700">
+              <span class="text-[10px] text-gray-500 uppercase font-mono font-bold block mb-1">Pick Slot 1</span>
+              <input type="text" id="team-name-1" value="Team 1" onchange="saveAllDraftTeams()" class="w-full bg-gray-800 font-bold text-green-400 text-sm px-2 py-1 rounded border border-gray-700 focus:border-green-500 focus:outline-none">
+            </div>
+            <div class="bg-gray-900 p-3 rounded-lg border border-gray-700">
+              <span class="text-[10px] text-gray-500 uppercase font-mono font-bold block mb-1">Pick Slot 2</span>
+              <input type="text" id="team-name-2" value="Team 2" onchange="saveAllDraftTeams()" class="w-full bg-gray-800 font-bold text-green-400 text-sm px-2 py-1 rounded border border-gray-700 focus:border-green-500 focus:outline-none">
+            </div>
+            <div class="bg-gray-900 p-3 rounded-lg border border-gray-700">
+              <span class="text-[10px] text-gray-500 uppercase font-mono font-bold block mb-1">Pick Slot 3</span>
+              <input type="text" id="team-name-3" value="Team 3" onchange="saveAllDraftTeams()" class="w-full bg-gray-800 font-bold text-green-400 text-sm px-2 py-1 rounded border border-gray-700 focus:border-green-500 focus:outline-none">
+            </div>
+            <div class="bg-gray-900 p-3 rounded-lg border border-gray-700">
+              <span class="text-[10px] text-gray-500 uppercase font-mono font-bold block mb-1">Pick Slot 4</span>
+              <input type="text" id="team-name-4" value="Team 4" onchange="saveAllDraftTeams()" class="w-full bg-gray-800 font-bold text-green-400 text-sm px-2 py-1 rounded border border-gray-700 focus:border-green-500 focus:outline-none">
+            </div>
+            <div class="bg-gray-900 p-3 rounded-lg border border-gray-700">
+              <span class="text-[10px] text-gray-500 uppercase font-mono font-bold block mb-1">Pick Slot 5</span>
+              <input type="text" id="team-name-5" value="Team 5" onchange="saveAllDraftTeams()" class="w-full bg-gray-800 font-bold text-green-400 text-sm px-2 py-1 rounded border border-gray-700 focus:border-green-500 focus:outline-none">
+            </div>
+          </div>
+
+          <!-- Dynamic Draft Rows -->
+          <div id="draft-grid-rows" class="space-y-4"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: STANDINGS PAGE -->
+    <div id="page-leaderboard" class="hidden space-y-6">
+      
+      <!-- Team Standings (Centered Flex Layout) -->
+      <div class="bg-gray-800 rounded-xl p-6 border border-gray-700 shadow-lg">
+        <h2 class="text-xl font-bold text-white mb-6 text-center sm:text-left">🏆 Pool Team Standings</h2>
+        
+        <!-- Centered flex container for team cards -->
+        <div id="team-standings" class="flex flex-wrap justify-center gap-6">
+          <p class="text-gray-500 text-sm">No draft teams saved yet. Complete your picks on the Draft Page tab!</p>
+        </div>
+      </div>
+
+      <!-- Live Tournament Field Table -->
+      <div class="bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-700">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-bold text-white">⛳ Live Tournament Field Scores</h2>
+          <button onclick="syncLiveScores()" class="bg-green-600 hover:bg-green-500 text-white font-semibold py-1.5 px-3 rounded text-xs">
+            🔄 Refresh Scores
+          </button>
+        </div>
+        
+        <div class="overflow-x-auto max-h-[400px]">
+          <table class="w-full text-left border-collapse">
+            <thead class="sticky top-0 bg-gray-800 border-b border-gray-700 text-gray-400 text-xs uppercase">
+              <tr>
+                <th class="py-3 px-4">Pos</th>
+                <th class="py-3 px-4">Player</th>
+                <th class="py-3 px-4">Draft Status</th>
+                <th class="py-3 px-4">Score</th>
+                <th class="py-3 px-4">Thru / Tee Time</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard" class="divide-y divide-gray-700/50">
+              <tr><td colspan="5" class="py-4 px-4 text-gray-500">Loading scores...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: PREVIOUS WINNERS PAGE -->
+    <div id="page-winners" class="hidden space-y-6">
+      <div class="bg-gray-800 rounded-xl p-6 border border-gray-700 shadow-lg">
+        
+        <!-- Header & Controls -->
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-gray-700 pb-4">
+          <div>
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+              <span>📜 Hall of Champions</span>
+              <span id="winners-status-badge" class="text-xs bg-yellow-950 text-yellow-400 border border-yellow-700/80 font-mono px-2 py-0.5 rounded-full">🔒 Locked</span>
+            </h2>
+            <p class="text-xs text-gray-400 mt-1">Official Major Pool Winning Managers by Year</p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button onclick="addNewYearRow()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 px-3 rounded-lg text-xs transition border border-blue-500">
+              ➕ Add Year
+            </button>
+            <button id="toggle-edit-winners-btn" onclick="toggleWinnersEdit()" class="bg-yellow-600 hover:bg-yellow-500 text-gray-900 font-bold py-1.5 px-4 rounded-lg text-xs transition border border-yellow-500">
+              ✏️ Edit Winners
+            </button>
+            <button id="save-winners-btn" onclick="saveWinnersGrid()" class="hidden bg-green-600 hover:bg-green-500 text-white font-bold py-1.5 px-4 rounded-lg text-xs transition border border-green-500">
+              💾 Save & Lock Winners
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 Major Columns Matrix Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-center border-collapse">
+            <thead class="bg-gray-900 border-b border-gray-700 text-gray-300 text-xs uppercase tracking-wider">
+              <tr>
+                <th class="py-4 px-4 text-left w-24">Year</th>
+                
+                <th class="py-3 px-3">
+                  <div class="bg-emerald-950/60 border border-emerald-700/60 rounded-xl p-2.5 flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>
+                    <span class="font-bold text-emerald-300 tracking-wide">The Masters</span>
+                  </div>
+                </th>
+
+                <th class="py-3 px-3">
+                  <div class="bg-blue-950/60 border border-blue-700/60 rounded-xl p-2.5 flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                    <span class="font-bold text-blue-300 tracking-wide">PGA Champ</span>
+                  </div>
+                </th>
+
+                <th class="py-3 px-3">
+                  <div class="bg-red-950/60 border border-red-700/60 rounded-xl p-2.5 flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"></path></svg>
+                    <span class="font-bold text-red-300 tracking-wide">U.S. Open</span>
+                  </div>
+                </th>
+
+                <th class="py-3 px-3">
+                  <div class="bg-amber-950/60 border border-amber-700/60 rounded-xl p-2.5 flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V6a2 2 0 10-2 2h2zm0 13C10.832 21 2 20 2 20l.9-1c.916 0 2.215-.224 2.215-.224L7 16l-1-4 3-2 3 2 3-2 3 2-1 4 1.885 2.776S19.184 20 20.1 20l.9 1s-8.832 1-10 1z"></path></svg>
+                    <span class="font-bold text-amber-300 tracking-wide">The Open</span>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="winners-grid-body" class="divide-y divide-gray-700/60 text-sm">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://cloummsejcxseqsycnpy.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_58rUQDYz8EnnltVL9aBCxg_ZcQkCvhN';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let allGolfers = [];
+    let draftMatrix = { 1: ['', '', '', ''], 2: ['', '', '', ''], 3: ['', '', '', ''], 4: ['', '', '', ''], 5: ['', '', '', ''] };
+    
+    // Pool Rules State
+    let scoringCount = 4;
+    let enforceCutElimination = true;
+
+    // Initial Winner History Data
+    let winnersData = {
+      '2026': { masters: 'Zach', pga: 'Daniel', usopen: 'Daniel', open: 'Eli' },
+      '2025': { masters: 'Zach', pga: 'Brian', usopen: 'Brian', open: 'Jeremy' },
+      '2024': { masters: 'Daniel', pga: 'Brian', usopen: 'Eli', open: 'Zach' }
+    };
+
+    let isEditingWinners = false;
+
+    function switchTab(tab) {
+      const draftPage = document.getElementById('page-draft');
+      const leaderboardPage = document.getElementById('page-leaderboard');
+      const winnersPage = document.getElementById('page-winners');
+
+      const draftBtn = document.getElementById('tab-draft-btn');
+      const leaderboardBtn = document.getElementById('tab-leaderboard-btn');
+      const winnersBtn = document.getElementById('tab-winners-btn');
+
+      draftPage.classList.add('hidden');
+      leaderboardPage.classList.add('hidden');
+      winnersPage.classList.add('hidden');
+
+      const inactiveStyle = "px-4 py-2 rounded-md font-semibold text-sm transition text-gray-400 hover:text-white";
+      const activeStyle = "px-4 py-2 rounded-md font-semibold text-sm transition bg-green-600 text-white";
+
+      draftBtn.className = inactiveStyle;
+      leaderboardBtn.className = inactiveStyle;
+      winnersBtn.className = inactiveStyle;
+
+      if (tab === 'draft') {
+        draftPage.classList.remove('hidden');
+        draftBtn.className = activeStyle;
+      } else if (tab === 'leaderboard') {
+        leaderboardPage.classList.remove('hidden');
+        leaderboardBtn.className = activeStyle;
+        loadData();
+      } else if (tab === 'winners') {
+        winnersPage.classList.remove('hidden');
+        winnersBtn.className = activeStyle;
+        renderWinnersTable();
+      }
+    }
+
+    function setScoringCount(count) {
+      scoringCount = count;
+      [2, 3, 4].forEach(c => {
+        const btn = document.getElementById(`score-count-${c}-btn`);
+        if (btn) {
+          if (c === count) {
+            btn.className = "px-3 py-1.5 rounded text-xs font-bold transition bg-green-600 text-white";
+          } else {
+            btn.className = "px-3 py-1.5 rounded text-xs font-bold transition text-gray-400 hover:text-white";
+          }
+        }
+      });
+      loadData();
+    }
+
+    function toggleCutRule() {
+      enforceCutElimination = document.getElementById('rule-cut-elimination').checked;
+      loadData();
+    }
+
+    function parseScoreToNumeric(scoreStr) {
+      if (!scoreStr || scoreStr === 'E' || scoreStr === 'EVEN' || scoreStr === '-') return 0;
+      const num = parseInt(scoreStr.replace('+', ''), 10);
+      return isNaN(num) ? 999 : num;
+    }
+
+    function isMissedCut(posStr) {
+      if (!posStr) return false;
+      const p = posStr.toUpperCase().trim();
+      return p.includes('CUT') || p.includes('WD') || p.includes('DQ') || p.includes('MDF');
+    }
+
+    function calculateHolesLeft(thruStr) {
+      if (!thruStr) return 18;
+      const str = thruStr.toUpperCase().trim();
+      if (str === 'F' || str === 'FIN' || str === 'FINAL' || str.includes('CUT') || str.includes('WD')) {
+        return 0;
+      }
+      const parsedHole = parseInt(str, 10);
+      if (!isNaN(parsedHole)) {
+        return Math.max(0, 18 - parsedHole);
+      }
+      // If it's a tee time like "1:15 PM"
+      return 18;
+    }
+
+    async function loadData() {
+      const statusEl = document.getElementById('status');
+
+      // Load Winners from Local Storage if present
+      const savedWinners = localStorage.getItem('major_winners_grid');
+      if (savedWinners) {
+        try { winnersData = JSON.parse(savedWinners); } catch(e) {}
+      }
+
+      const { data: scoresData } = await db.from('tournament_scores').select('*');
+      if (scoresData) {
+        allGolfers = scoresData.map(d => d.player_name).sort();
+        renderLiveFieldTable(scoresData);
+      }
+
+      const { data: teamsData } = await db.from('pool_teams').select('*').order('id', { ascending: true });
+
+      if (teamsData && teamsData.length > 0) {
+        teamsData.forEach((team, idx) => {
+          if (idx < 5) {
+            const teamNum = idx + 1;
+            const nameEl = document.getElementById(`team-name-${teamNum}`);
+            if (nameEl) nameEl.value = team.user_name || `Team ${teamNum}`;
+            
+            draftMatrix[teamNum] = [
+              team.golfer_1 !== 'Unassigned' ? team.golfer_1 : '',
+              team.golfer_2 !== 'Unassigned' ? team.golfer_2 : '',
+              team.golfer_3 !== 'Unassigned' ? team.golfer_3 : '',
+              team.golfer_4 !== 'Unassigned' ? team.golfer_4 : ''
+            ];
+          }
+        });
+        
+        renderTeamStandings(teamsData, scoresData || []);
+      } else {
+        renderTeamStandingsFromMatrix(scoresData || []);
+      }
+
+      statusEl.textContent = `🟢 Connected | ${allGolfers.length} Golfer Field Loaded`;
+      statusEl.className = 'text-green-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
+
+      renderDraftGrid();
+    }
+
+    function renderWinnersTable() {
+      const tbody = document.getElementById('winners-grid-body');
+      const years = Object.keys(winnersData).sort((a, b) => b - a);
+      const majors = ['masters', 'pga', 'usopen', 'open'];
+
+      let html = '';
+      years.forEach(year => {
+        html += `<tr class="hover:bg-gray-750/50 transition">`;
+        html += `<td class="py-4 px-4 text-left font-mono font-bold text-gray-300 text-base">${year}</td>`;
+
+        majors.forEach(major => {
+          const val = winnersData[year]?.[major] || '';
+          
+          if (isEditingWinners) {
+            html += `
+              <td class="py-3 px-2">
+                <input type="text" id="winner-${year}-${major}" value="${val}" class="w-full bg-gray-900 text-center font-bold text-yellow-400 border border-yellow-600/60 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-yellow-400">
+              </td>
+            `;
+          } else {
+            html += `
+              <td class="py-3 px-2">
+                ${val ? `
+                  <span class="inline-block bg-yellow-950/40 text-yellow-300 border border-yellow-700/60 font-bold px-3 py-1.5 rounded-lg text-sm shadow-sm">
+                    ${val}
+                  </span>
+                ` : `
+                  <span class="text-gray-600 text-xs font-mono">- TBD -</span>
+                `}
+              </td>
+            `;
+          }
+        });
+
+        html += `</tr>`;
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    function toggleWinnersEdit() {
+      isEditingWinners = true;
+      document.getElementById('toggle-edit-winners-btn').classList.add('hidden');
+      document.getElementById('save-winners-btn').classList.remove('hidden');
+      
+      const badge = document.getElementById('winners-status-badge');
+      badge.textContent = '✏️ Editing';
+      badge.className = 'text-xs bg-green-950 text-green-400 border border-green-700/80 font-mono px-2 py-0.5 rounded-full';
+
+      renderWinnersTable();
+    }
+
+    function addNewYearRow() {
+      const existingYears = Object.keys(winnersData).map(y => parseInt(y, 10));
+      const maxYear = existingYears.length > 0 ? Math.max(...existingYears) : 2026;
+      const nextYear = (maxYear + 1).toString();
+
+      if (!winnersData[nextYear]) {
+        winnersData[nextYear] = { masters: '', pga: '', usopen: '', open: '' };
+      }
+
+      if (!isEditingWinners) {
+        toggleWinnersEdit();
+      } else {
+        renderWinnersTable();
+      }
+    }
+
+    function saveWinnersGrid() {
+      const years = Object.keys(winnersData);
+      const majors = ['masters', 'pga', 'usopen', 'open'];
+
+      years.forEach(year => {
+        majors.forEach(major => {
+          const inputEl = document.getElementById(`winner-${year}-${major}`);
+          if (inputEl) {
+            if (!winnersData[year]) winnersData[year] = {};
+            winnersData[year][major] = inputEl.value.trim();
+          }
+        });
+      });
+
+      localStorage.setItem('major_winners_grid', JSON.stringify(winnersData));
+
+      isEditingWinners = false;
+      document.getElementById('save-winners-btn').classList.add('hidden');
+      document.getElementById('toggle-edit-winners-btn').classList.remove('hidden');
+
+      const badge = document.getElementById('winners-status-badge');
+      badge.textContent = '🔒 Locked';
+      badge.className = 'text-xs bg-yellow-950 text-yellow-400 border border-yellow-700/80 font-mono px-2 py-0.5 rounded-full';
+
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = '✅ Previous winners saved and locked!';
+      statusEl.className = 'text-green-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
+
+      renderWinnersTable();
+    }
+
+    function getCurrentlyTakenGolfers() {
+      const taken = new Set();
+      for (let team = 1; team <= 5; team++) {
+        for (let round = 0; round < 4; round++) {
+          const val = draftMatrix[team][round];
+          if (val) taken.add(val);
+        }
+      }
+      return taken;
+    }
+
+    async function updatePick(teamNum, roundIdx, value) {
+      draftMatrix[teamNum][roundIdx] = value;
+      renderDraftGrid();
+      await saveAllDraftTeams();
+    }
+
+    function renderDraftGrid() {
+      const rowsContainer = document.getElementById('draft-grid-rows');
+      const takenGolfers = getCurrentlyTakenGolfers();
+
+      let html = '';
+      for (let round = 0; round < 4; round++) {
+        html += `
+          <div>
+            <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+              <span class="bg-gray-700 text-gray-200 px-2 py-0.5 rounded font-mono">Round ${round + 1}</span>
+            </div>
+            <div class="grid grid-cols-5 gap-3">
+        `;
+
+        for (let team = 1; team <= 5; team++) {
+          const currentSelection = draftMatrix[team][round];
+          const optionsHtml = allGolfers
+            .filter(g => !takenGolfers.has(g) || g === currentSelection)
+            .map(g => `<option value="${g}" ${g === currentSelection ? 'selected' : ''}>${g}</option>`)
+            .join('');
+
+          html += `
+            <div class="bg-gray-900/60 p-2 rounded-lg border border-gray-700/70">
+              <select onchange="updatePick(${team}, ${round}, this.value)" class="w-full bg-gray-800 text-xs p-2 rounded border border-gray-700 text-white focus:outline-none focus:border-green-500">
+                <option value="">-- Choose Golfer --</option>
+                ${optionsHtml}
+              </select>
+            </div>
+          `;
+        }
+        html += `</div></div>`;
+      }
+      rowsContainer.innerHTML = html;
+    }
+
+    async function saveAllDraftTeams() {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = '⚡ Saving picks to database...';
+
+      await db.from('pool_teams').delete().neq('id', 0);
+
+      const payload = [];
+      for (let team = 1; team <= 5; team++) {
+        const teamName = document.getElementById(`team-name-${team}`)?.value.trim() || `Team ${team}`;
+        const picks = draftMatrix[team];
+        payload.push({
+          user_name: teamName,
+          golfer_1: picks[0] || 'Unassigned',
+          golfer_2: picks[1] || 'Unassigned',
+          golfer_3: picks[2] || 'Unassigned',
+          golfer_4: picks[3] || 'Unassigned'
+        });
+      }
+
+      const { error } = await db.from('pool_teams').insert(payload);
+
+      if (!error) {
+        statusEl.textContent = '✅ Picks auto-saved successfully!';
+        statusEl.className = 'text-green-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
+      } else {
+        statusEl.textContent = '❌ Error saving: ' + error.message;
+        statusEl.className = 'text-red-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
+      }
+    }
+
+    async function resetDraftBoard() {
+      if (!confirm('Are you sure you want to reset the draft board? This clears all picks.')) return;
+
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = '⏳ Resetting draft board...';
+
+      await db.from('pool_teams').delete().neq('id', 0);
+
+      draftMatrix = { 1: ['', '', '', ''], 2: ['', '', '', ''], 3: ['', '', '', ''], 4: ['', '', '', ''], 5: ['', '', '', ''] };
+      
+      for (let i = 1; i <= 5; i++) {
+        const el = document.getElementById(`team-name-${i}`);
+        if (el) el.value = `Team ${i}`;
+      }
+
+      statusEl.textContent = '🧹 Draft board reset! Ready for draft.';
+      statusEl.className = 'text-green-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
+
+      loadData();
+    }
+
+    function renderTeamStandings(teams, scores) {
+      const container = document.getElementById('team-standings');
+      const scoreMap = {};
+      const posMap = {};
+      const thruMap = {};
+      
+      scores.forEach(s => { 
+        scoreMap[s.player_name] = s.score;
+        posMap[s.player_name] = s.position;
+        thruMap[s.player_name] = s.thru;
+      });
+
+      const evaluatedTeams = teams.map(t => {
+        const golfersRaw = [t.golfer_1, t.golfer_2, t.golfer_3, t.golfer_4].filter(g => g !== 'Unassigned');
+        
+        let missedCutCount = 0;
+        let totalHolesRemaining = 0;
+
+        // Parse individual scores
+        const golferObjList = golfersRaw.map(name => {
+          const strScore = scoreMap[name] || 'E';
+          const pos = posMap[name] || '-';
+          const thru = thruMap[name] || 'F';
+          const numScore = parseScoreToNumeric(strScore);
+          const missedCut = isMissedCut(pos);
+          const holesLeft = calculateHolesLeft(thru);
+
+          if (missedCut) missedCutCount++;
+          if (!missedCut) totalHolesRemaining += holesLeft;
+
+          return { name, strScore, numScore, missedCut, pos, thru, holesLeft };
+        });
+
+        // Check DQ condition
+        const activeGolfers = golferObjList.length - missedCutCount;
+        const isDisqualified = enforceCutElimination && (activeGolfers < scoringCount);
+
+        // Sort golfers: Active golfers with best score first, missed cut players at the end
+        golferObjList.sort((a, b) => {
+          if (a.missedCut && !b.missedCut) return 1;
+          if (!a.missedCut && b.missedCut) return -1;
+          return a.numScore - b.numScore;
+        });
+
+        // Calculate total score based on scoring count setting
+        let total = 0;
+        golferObjList.forEach((g, idx) => {
+          if (idx < scoringCount && !g.missedCut) {
+            g.counted = true;
+            total += g.numScore;
+          } else {
+            g.counted = false;
+          }
+        });
+
+        return { 
+          name: t.user_name, 
+          golfers: golferObjList, 
+          totalScore: total, 
+          missedCutCount, 
+          isDisqualified,
+          totalHolesRemaining
+        };
+      }).sort((a, b) => {
+        if (a.isDisqualified && !b.isDisqualified) return 1;
+        if (!a.isDisqualified && b.isDisqualified) return -1;
+        return a.totalScore - b.totalScore;
+      });
+
+      container.innerHTML = evaluatedTeams.map((t, idx) => `
+        <div class="w-full sm:w-[320px] bg-gray-900 p-5 rounded-xl border ${t.isDisqualified ? 'border-red-600/80 bg-red-950/20' : 'border-gray-700'} flex flex-col justify-between shadow-lg transition hover:border-gray-600">
+          <div>
+            <!-- Manager Header & Total Score -->
+            <div class="flex justify-between items-center border-b border-gray-800 pb-3 mb-3">
+              <div class="flex flex-col">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-base text-white">#${idx + 1} ${t.name}</span>
+                  ${t.isDisqualified ? '<span class="text-[10px] bg-red-900 text-red-200 border border-red-600 font-bold px-2 py-0.5 rounded font-mono">DQ - LOSS</span>' : ''}
+                </div>
+                ${!t.isDisqualified ? `
+                  <span class="text-[10px] font-mono text-blue-400 mt-0.5 flex items-center gap-1">
+                    ⚡ ${t.totalHolesRemaining} Holes Left Today
+                  </span>
+                ` : ''}
+              </div>
+
+              ${t.isDisqualified ? `
+                <span class="font-mono font-bold text-xs px-2.5 py-1 rounded-md bg-red-950 text-red-400 border border-red-800">
+                  OUT (2+ MC)
+                </span>
+              ` : `
+                <span class="font-mono font-bold text-sm px-2.5 py-1 rounded-md ${t.totalScore < 0 ? 'bg-green-950 text-green-400 border border-green-800' : t.totalScore > 0 ? 'bg-red-950 text-red-400 border border-red-800' : 'bg-gray-800 text-gray-300 border border-gray-700'}">
+                  ${t.totalScore > 0 ? '+' + t.totalScore : t.totalScore === 0 ? 'E' : t.totalScore}
+                </span>
+              `}
+            </div>
+
+            <!-- Golfers List -->
+            <ul class="space-y-2.5 text-xs">
+              ${t.golfers.length > 0 ? t.golfers.map(g => `
+                <li class="flex justify-between items-center ${g.counted && !t.isDisqualified ? 'text-gray-200 font-medium' : 'text-gray-500 line-through'}">
+                  <div class="flex flex-col truncate max-w-[170px]">
+                    <span class="flex items-center gap-1.5 truncate">
+                      ${g.name}${g.missedCut ? '<span class="text-[9px] bg-red-950 text-red-400 border border-red-800/80 px-1 rounded no-underline font-normal">CUT</span>' : ''}
+                    </span>
+                    <span class="text-[10px] font-mono text-gray-400 no-underline">
+                      ${g.missedCut ? 'MC' : 'Thru: ' + (g.thru || 'F')}
+                    </span>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    ${!g.counted && !g.missedCut ? '<span class="text-[9px] bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded uppercase font-mono no-underline">Dropped</span>' : ''}
+                    <span class="font-mono font-semibold ${g.counted && !t.isDisqualified ? 'text-gray-300' : 'text-gray-500'}">${g.strScore}</span>
+                  </div>
+                </li>
+              `).join('') : '<li class="text-gray-500 text-center py-2">No golfers selected</li>'}
+            </ul>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderTeamStandingsFromMatrix(scores) {
+      const teams = [];
+      for (let team = 1; team <= 5; team++) {
+        const name = document.getElementById(`team-name-${team}`)?.value || `Team ${team}`;
+        const picks = draftMatrix[team].filter(g => g !== '');
+        teams.push({ user_name: name, golfer_1: picks[0] || 'Unassigned', golfer_2: picks[1] || 'Unassigned', golfer_3: picks[2] || 'Unassigned', golfer_4: picks[3] || 'Unassigned' });
+      }
+      renderTeamStandings(teams, scores);
+    }
+
+    function renderLiveFieldTable(scoresData) {
+      const tableEl = document.getElementById('leaderboard');
+      const takenGolfers = getCurrentlyTakenGolfers();
+      const sorted = [...scoresData].sort((a, b) => parseScoreToNumeric(a.score) - parseScoreToNumeric(b.score));
+
+      tableEl.innerHTML = sorted.map(row => {
+        const isTaken = takenGolfers.has(row.player_name);
+        return `
+          <tr class="${isTaken ? 'bg-gray-800/40 text-gray-500' : 'hover:bg-gray-750 text-white'} transition">
+            <td class="py-2.5 px-4 font-mono text-xs text-gray-400">${row.position || '-'}</td>
+            <td class="py-2.5 px-4 font-semibold text-sm">${row.player_name}</td>
+            <td class="py-2.5 px-4 text-xs font-mono">${isTaken ? '<span class="text-red-400 bg-red-950/60 px-2 py-0.5 rounded border border-red-800">DRAFTED</span>' : '<span class="text-green-400 bg-green-950/60 px-2 py-0.5 rounded border border-green-800">AVAILABLE</span>'}</td>
+            <td class="py-2.5 px-4 text-sm ${row.score && row.score.startsWith('-') ? 'text-green-400 font-bold' : row.score && row.score.startsWith('+') ? 'text-red-400 font-bold' : 'text-gray-300 font-bold'}">${row.score || 'E'}</td>
+            <td class="py-2.5 px-4 text-gray-300 font-mono text-xs">${row.thru || 'F'}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function syncLiveScores() {
+      try {
+        const res = await fetch('https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard');
+        const json = await res.json();
+        
+        const eventName = json.events?.[0]?.name;
+        if (eventName) {
+          document.getElementById('tournament-name').textContent = '⛳ ' + eventName;
+        }
+
+        const competitors = json.events?.[0]?.competitions?.[0]?.competitors || [];
+        if (competitors.length > 0) {
+          const updates = competitors.map((c, idx) => {
+            let statusText = 'F';
+            if (c.status?.displayThru) {
+              statusText = c.status.displayThru;
+            } else if (c.status?.thru) {
+              statusText = `Thru ${c.status.thru}`;
+            } else if (c.status?.type?.detail) {
+              statusText = c.status.type.detail;
+            } else if (c.status?.teeTime) {
+              statusText = c.status.teeTime;
+            }
+
+            return {
+              player_name: c.athlete?.displayName || 'Unknown Player',
+              score: c.score || 'E',
+              position: c.status?.position?.displayName || `${idx + 1}`,
+              thru: statusText
+            };
+          });
+
+          await db.from('tournament_scores').upsert(updates, { onConflict: 'player_name' });
+        }
+
+        loadData();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    loadData();
+    syncLiveScores();
+    setInterval(syncLiveScores, 60000);
+  </script>
+</body>
+</html>
