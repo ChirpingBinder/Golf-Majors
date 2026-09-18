@@ -48,7 +48,7 @@
           <h3 class="text-sm font-bold text-white flex items-center gap-2">
             ⚙️ Pool Scoring & Format Rules
           </h3>
-          <p class="text-xs text-gray-400">Set active scoring rules and cut penalty conditions before/during the draft</p>
+          <p class="text-xs text-gray-400">Set active scoring rules and cut penalty conditions (Syncs live for all viewers)</p>
         </div>
         
         <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full lg:w-auto">
@@ -290,21 +290,39 @@
       }
     }
 
-    // --- GLOBALLY SYNCED RULE UPDATES ---
+    // --- REALTIME SYNCED RULE UPDATES ---
     async function setScoringCount(count) {
       scoringCount = count;
       updateRuleUI();
-      try {
-        await db.from('pool_rules').upsert({ id: 1, scoring_count: count, cut_rule: enforceCutElimination });
-      } catch(e) { console.error("Error updating rules:", e); }
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = '⚡ Syncing rule change to database...';
+
+      const { error } = await db.from('pool_rules').upsert({ id: 1, scoring_count: count, cut_rule: enforceCutElimination });
+      if (error) {
+        console.error("Supabase Rule Update Error:", error);
+        statusEl.textContent = '❌ Failed to save rule: ' + error.message;
+        statusEl.className = 'text-red-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
+      } else {
+        statusEl.textContent = '✅ Scoring rule synced across all users!';
+        statusEl.className = 'text-green-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
+      }
       loadData();
     }
 
     async function toggleCutRule() {
       enforceCutElimination = document.getElementById('rule-cut-elimination').checked;
-      try {
-        await db.from('pool_rules').upsert({ id: 1, scoring_count: scoringCount, cut_rule: enforceCutElimination });
-      } catch(e) { console.error("Error updating rules:", e); }
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = '⚡ Syncing rule change to database...';
+
+      const { error } = await db.from('pool_rules').upsert({ id: 1, scoring_count: scoringCount, cut_rule: enforceCutElimination });
+      if (error) {
+        console.error("Supabase Rule Update Error:", error);
+        statusEl.textContent = '❌ Failed to save rule: ' + error.message;
+        statusEl.className = 'text-red-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
+      } else {
+        statusEl.textContent = '✅ Cut rule synced across all users!';
+        statusEl.className = 'text-green-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
+      }
       loadData();
     }
 
@@ -319,6 +337,20 @@
       });
       const cutCheckbox = document.getElementById('rule-cut-elimination');
       if (cutCheckbox) cutCheckbox.checked = enforceCutElimination;
+    }
+
+    // --- SUBSCRIBE TO REALTIME RULE CHANGES ---
+    function setupRealtimeRuleListener() {
+      db.channel('public:pool_rules')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'pool_rules' }, payload => {
+          if (payload.new) {
+            scoringCount = payload.new.scoring_count ?? 4;
+            enforceCutElimination = payload.new.cut_rule ?? true;
+            updateRuleUI();
+            loadData();
+          }
+        })
+        .subscribe();
     }
 
     function parseScoreToNumeric(scoreStr) {
@@ -788,7 +820,9 @@
       }
     }
 
+    // Startup Execution
     loadData();
+    setupRealtimeRuleListener();
     syncLiveScores();
     setInterval(syncLiveScores, 60000);
   </script>
