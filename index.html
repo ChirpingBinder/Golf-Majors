@@ -40,6 +40,9 @@
     <!-- Status Message -->
     <div id="status" class="text-yellow-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700">Connecting to Supabase...</div>
 
+    <!-- Countdown to Next Major -->
+    <div id="countdown-banner" class="hidden bg-gradient-to-r from-green-900/40 to-gray-800 border border-green-700/50 rounded-lg p-3 text-center text-sm font-semibold text-green-300"></div>
+
     <!-- TAB 1: DRAFT PAGE -->
     <div id="page-draft" class="space-y-6">
       
@@ -256,6 +259,51 @@
     };
 
     let isEditingWinners = false;
+    let isTournamentLive = false;
+
+    // --- UPCOMING MAJOR SCHEDULE (update yearly as new dates are confirmed) ---
+    const upcomingMajors = [
+      { name: 'The Masters', date: '2027-04-08' },
+      { name: 'PGA Championship', date: '2027-05-20' },
+      { name: 'U.S. Open', date: '2027-06-17' },
+      { name: 'The Open Championship', date: '2027-07-15' },
+      { name: 'The Masters', date: '2028-04-06' },
+      { name: 'PGA Championship', date: '2028-05-18' },
+      { name: 'U.S. Open', date: '2028-06-15' },
+      { name: 'The Open Championship', date: '2028-08-03' }
+    ];
+
+    function renderCountdownBanner() {
+      const banner = document.getElementById('countdown-banner');
+
+      // Hide the countdown entirely while a major is actually being played
+      if (isTournamentLive) {
+        banner.classList.add('hidden');
+        return;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const next = upcomingMajors
+        .map(m => ({ ...m, dateObj: new Date(m.date + 'T00:00:00') }))
+        .filter(m => m.dateObj >= today)
+        .sort((a, b) => a.dateObj - b.dateObj)[0];
+
+      if (!next) {
+        banner.classList.add('hidden');
+        return;
+      }
+
+      const daysLeft = Math.round((next.dateObj - today) / (1000 * 60 * 60 * 24));
+      let label;
+      if (daysLeft === 0) label = `⛳ ${next.name} starts today!`;
+      else if (daysLeft === 1) label = `⛳ ${next.name} starts tomorrow!`;
+      else label = `⛳ ${daysLeft} days until ${next.name}`;
+
+      banner.textContent = label;
+      banner.classList.remove('hidden');
+    }
 
     function switchTab(tab) {
       const draftPage = document.getElementById('page-draft');
@@ -898,6 +946,12 @@ function updateAddYearButtonState() {
           document.getElementById('tournament-name').textContent = '⛳ ' + eventName;
         }
 
+        // Track whether a major is currently in progress ("in") vs not started ("pre") or finished ("post"),
+        // so the countdown banner can hide itself during the tournament and reappear once it's over.
+        const eventState = json.events?.[0]?.status?.type?.state;
+        isTournamentLive = (eventState === 'in');
+        renderCountdownBanner();
+
         const competitors = json.events?.[0]?.competitions?.[0]?.competitors || [];
         if (competitors.length > 0) {
           const updates = competitors.map((c, idx) => {
@@ -934,6 +988,7 @@ function updateAddYearButtonState() {
     setupRealtimeRuleListener();
     setupRealtimeWinnersListener();
     loadWinnersFromDb();
+    renderCountdownBanner();
     syncLiveScores();
     setInterval(syncLiveScores, 60000);
   </script>
