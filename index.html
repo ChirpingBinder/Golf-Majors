@@ -248,7 +248,7 @@
     let scoringCount = 4;
     let enforceCutElimination = true;
 
-    // Initial Winner History Data
+    // Initial Winner History Data (fallback defaults if the pool_winners table is empty)
     let winnersData = {
       '2026': { masters: 'Zach', pga: 'Daniel', usopen: 'Daniel', open: 'Eli' },
       '2025': { masters: 'Zach', pga: 'Brian', usopen: 'Brian', open: 'Jeremy' },
@@ -287,7 +287,7 @@
       } else if (tab === 'winners') {
         winnersPage.classList.remove('hidden');
         winnersBtn.className = activeStyle;
-        renderWinnersTable();
+        loadWinnersFromDb().then(renderWinnersTable);
       }
     }
 
@@ -354,6 +354,18 @@
         .subscribe();
     }
 
+    // --- SUBSCRIBE TO REALTIME WINNERS CHANGES ---
+    function setupRealtimeWinnersListener() {
+      db.channel('public:pool_winners')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'pool_winners' }, () => {
+          // Someone (maybe you, on another device) changed the winners grid — refresh everyone's view.
+          loadWinnersFromDb().then(() => {
+            if (!isEditingWinners) renderWinnersTable();
+          });
+        })
+        .subscribe();
+    }
+
     function parseScoreToNumeric(scoreStr) {
       if (!scoreStr || scoreStr === 'E' || scoreStr === 'EVEN' || scoreStr === '-') return 0;
       const num = parseInt(scoreStr.replace('+', ''), 10);
@@ -379,6 +391,32 @@
       return 18;
     }
 
+    // --- WINNERS: LOAD FROM SUPABASE (shared for everyone) ---
+    async function loadWinnersFromDb() {
+      try {
+        const { data, error } = await db.from('pool_winners').select('*').order('year', { ascending: false });
+        if (error) {
+          console.error('Supabase Winners Load Error:', error);
+          return;
+        }
+        if (data && data.length > 0) {
+          const fresh = {};
+          data.forEach(row => {
+            fresh[row.year] = {
+              masters: row.masters || '',
+              pga: row.pga || '',
+              usopen: row.usopen || '',
+              open: row.open || ''
+            };
+          });
+          winnersData = fresh;
+        }
+        // If the table is empty, we keep the built-in defaults above until someone saves.
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     async function loadData() {
       const statusEl = document.getElementById('status');
 
@@ -391,12 +429,6 @@
           updateRuleUI();
         }
       } catch(e) {}
-
-      // Load Winners from Local Storage
-      const savedWinners = localStorage.getItem('major_winners_grid');
-      if (savedWinners) {
-        try { winnersData = JSON.parse(savedWinners); } catch(e) {}
-      }
 
       const { data: scoresData } = await db.from('tournament_scores').select('*');
       if (scoresData) {
@@ -489,11 +521,23 @@
   // Auto-update Add Year button visibility state
   updateAddYearButtonState();
 }
-function deleteYearRow(year) {
+async function deleteYearRow(year) {
   if (!confirm(`Are you sure you want to delete the year ${year}?`)) return;
-  
+
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = '⏳ Deleting year...';
+
+  const { error } = await db.from('pool_winners').delete().eq('year', year);
+  if (error) {
+    console.error('Supabase Winners Delete Error:', error);
+    statusEl.textContent = '❌ Failed to delete: ' + error.message;
+    statusEl.className = 'text-red-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
+    return;
+  }
+
   delete winnersData[year];
-  localStorage.setItem('major_winners_grid', JSON.stringify(winnersData));
+  statusEl.textContent = '✅ Year deleted for everyone.';
+  statusEl.className = 'text-green-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
   renderWinnersTable();
 }
 
@@ -549,9 +593,10 @@ function updateAddYearButtonState() {
       }
     }
 
-    function saveWinnersGrid() {
+    async function saveWinnersGrid() {
       const years = Object.keys(winnersData);
       const majors = ['masters', 'pga', 'usopen', 'open'];
+      const statusEl = document.getElementById('status');
 
       years.forEach(year => {
         majors.forEach(major => {
@@ -563,7 +608,24 @@ function updateAddYearButtonState() {
         });
       });
 
-      localStorage.setItem('major_winners_grid', JSON.stringify(winnersData));
+      statusEl.textContent = '⚡ Saving winners to database...';
+
+      const payload = Object.keys(winnersData).map(year => ({
+        year: parseInt(year, 10),
+        masters: winnersData[year].masters || '',
+        pga: winnersData[year].pga || '',
+        usopen: winnersData[year].usopen || '',
+        open: winnersData[year].open || ''
+      }));
+
+      const { error } = await db.from('pool_winners').upsert(payload, { onConflict: 'year' });
+
+      if (error) {
+        console.error('Supabase Winners Save Error:', error);
+        statusEl.textContent = '❌ Error saving winners: ' + error.message;
+        statusEl.className = 'text-red-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
+        return;
+      }
 
       isEditingWinners = false;
       document.getElementById('save-winners-btn').classList.add('hidden');
@@ -573,8 +635,7 @@ function updateAddYearButtonState() {
       badge.textContent = '🔒 Locked';
       badge.className = 'text-xs bg-yellow-950 text-yellow-400 border border-yellow-700/80 font-mono px-2 py-0.5 rounded-full';
 
-      const statusEl = document.getElementById('status');
-      statusEl.textContent = '✅ Previous winners saved and locked!';
+      statusEl.textContent = '✅ Previous winners saved — everyone can see the update!';
       statusEl.className = 'text-green-400 font-mono text-xs bg-gray-800/60 p-3 rounded-lg border border-gray-700';
 
       renderWinnersTable();
@@ -871,6 +932,8 @@ function updateAddYearButtonState() {
     // Startup Execution
     switchTab('leaderboard'); // Opens Standings tab on initial site load
     setupRealtimeRuleListener();
+    setupRealtimeWinnersListener();
+    loadWinnersFromDb();
     syncLiveScores();
     setInterval(syncLiveScores, 60000);
   </script>
